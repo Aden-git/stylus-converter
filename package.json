@@ -1,6 +1,6 @@
 {
   "name": "stylus2scss",
-  "version": "0.0.13",
+  "version": "0.0.14",
   "description": "A tool that converts a stylus into scss.",
   "main": "lib/index.js",
   "bin": {
