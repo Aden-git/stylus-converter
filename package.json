@@ -1,14 +1,15 @@
 {
-  "name": "stylus-converter",
-  "version": "0.8.1",
-  "description": "A tool that converts a stylus into sass, or less, or other precompiled CSS.",
+  "name": "stylus2scss",
+  "version": "0.0.13",
+  "description": "A tool that converts a stylus into scss.",
   "main": "lib/index.js",
   "bin": {
-    "stylus-conver": "bin/conver.js"
+    "stylus2scss": "bin/conver.js"
   },
   "scripts": {
     "build": "rollup -c",
-    "dev": "rollup -c && node ./test/converter-test.js",
+    "dev": "rollup -c && npm run launch",
+    "launch": "node ./test/test.js",
     "test": "npm run build && mocha ./test/index.spec.js"
   },
   "repository": {
@@ -16,23 +17,10 @@
     "url": "git+https://github.com/txs1992/stylus-converter.git"
   },
   "keywords": [
-    "stylus",
-    "stylus-converter",
-    "stylus-to",
-    "stylus2",
-    "stylusto",
-    "stylsu2scss",
-    "stylus2sass",
-    "stylus2less",
+    "stylus2scss",
     "stylusToScss",
-    "stylusToSass",
-    "stylusToLess",
     "stylustoscss",
-    "stylustosass",
-    "stylustoless",
-    "stylus-to-scss",
-    "stylus-to-sass",
-    "stylus-to-lcss"
+    "stylus-to-scss"
   ],
   "author": "MT",
   "license": "MIT",
@@ -52,6 +40,9 @@
     "rollup-plugin-babel": "^3.0.3"
   },
   "dependencies": {
+    "postcss": "^8.3.11",
+    "stylelint": "^14.0.1",
+    "stylelint-config-standard-scss": "^2.0.1",
     "commander": "^2.15.1",
     "invariant": "^2.2.4",
     "lodash.debounce": "^4.0.8",

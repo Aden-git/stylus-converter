@@ -1,6 +1,8 @@
-import Parser from 'stylus/lib/parser.js'
-import visitor from './visitor/index.js'
-import { _get as get, nodesToJSON } from './util.js'
+import Parser from 'stylus/lib/parser.js';
+import visitor from './visitor/index.js';
+import { _get as get, nodesToJSON } from './util.js';
+import stylelintConfig from '../stylelint';
+import stylelint from 'stylelint';
 
 export function parse(result) {
   return new Parser(result).parse()
@@ -28,7 +30,30 @@ export function converter(result, options = {
   const ast = new Parser(result).parse()
   // 开发时查看 ast 对象。
   // console.log(JSON.stringify(ast))
-  const text = visitor(ast, options, globalVariableList, globalMixinList)
+  let resultText = visitor(ast, options, globalVariableList, globalMixinList)
   // Convert special multiline comments to single-line comments
-  return text.replace(/\/\*\s!#sign#!\s(.*)\s\*\//g, '// $1')
+  resultText = resultText.replace(/\/\*\s!#sign#!\s(.*)\s\*\//g, '// $1')
+
+  resultText = fixMixins(resultText);
+
+  var fixedResults = stylelint.lint({
+    config: stylelintConfig,
+    code: resultText,
+    customSyntax: 'postcss-scss',
+    fix: true,
+  }).then(({ output }) => { return output; });
+  
+  return fixedResults;
 }
+
+function fixMixins(text) {
+  return text.replace(/\$(.*): \@mixin/g, '@mixin $1');
+}
+
+/**
+ * ISSUES
+ * 
+ * Variables
+ * Media queries
+ * Single line comments
+ */

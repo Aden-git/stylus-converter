@@ -48,7 +48,7 @@ let autoprefixer = true
 
 const COMPIL_CONFIT = {
   scss: {
-    variable: '$'
+    variable: ''//'$'
   },
   less: {
     variable: '@'
@@ -105,7 +105,8 @@ const TYPE_VISITOR_MAP = {
   Keyframes: visitKeyframes,
   QueryList: visitQueryList,
   Namespace: visitNamespace,
-  Expression: visitExpression
+  Expression: visitExpression,
+  Atblock: visitAtblock,
 }
 
 function handleLineno(lineno) {
@@ -156,14 +157,29 @@ function findNodesType(list, type) {
 }
 
 function visitNode(node) {
-  if (!node) return ''
+  if (!node || Object.keys(node).length === 0) return ''
   if (!node.nodes) {
     // guarantee to be an array
     node.nodes = []
   }
-  const json = node.__type ? node : node.toJSON && node.toJSON()
-  const handler = TYPE_VISITOR_MAP[json.__type]
-  return handler ? handler(node) : ''
+  try {
+    const json = node.__type ? node : node.toJSON && node.toJSON()
+    const handler = TYPE_VISITOR_MAP[(json || {}).__type]
+  
+    if(!handler) {
+      console.warn("There is no handler for " + json.__type);
+    } else {
+      console.info("Handling " + (json || {}).__type);
+    }
+
+    return handler ? handler(node) : ''
+  } catch (error) {
+    console.warn(error)
+    console.warn(node)
+  }
+
+  return '';
+
 }
 
 function recursiveSearchName(data, property, name) {
@@ -216,7 +232,7 @@ function visitSelector(node) {
   invariant(node, 'Missing node param');
   const nodes = nodesToJSON(node.segments)
   const endNode = nodes[nodes.length - 1]
-  let before = ''
+  let before = '\n'
   if (endNode.lineno) {
     before = handleLineno(endNode.lineno)
     oldLineno = endNode.lineno
@@ -224,6 +240,7 @@ function visitSelector(node) {
   before += getIndentation()
   const segmentText = visitNodes(node.segments)
   selectorLength--
+
   return before + segmentText
 }
 
@@ -294,7 +311,7 @@ function visitProperty({ expr, lineno, segments }) {
         const beforeExpText = before + trimFirst(visitExpression(expr))
         const expText = `${before}${segmentsText}: $${ident.name};`
         isProperty = false
-        PROPERTY_LIST.unshift({ prop: segmentsText, value: '$' + ident.name })
+        PROPERTY_LIST.unshift({ prop: segmentsText, value: COMPIL_CONFIT.scss.variable + ident.name })
         return beforeExpText + expText
       }
     }
@@ -325,8 +342,10 @@ function visitIdent({ val, name, rest, mixin, property }) {
       return `#{${name}}`
     }
     if (mixin) {
+      const before = handleLinenoAndIndentation(identVal)
+      const mixinValue = name === 'block' ? '@content;' : `@include ${replaceFirstATSymbol(name, '')};`;
       identLength--
-      return name === 'block' ? '@content;' : `#{$${name}}`
+      return `\n${before}${mixinValue}`
     }
     let nameText = (VARIABLE_NAME_LIST.indexOf(name) > -1 || GLOBAL_VARIABLE_NAME_LIST.indexOf(name) > -1)
       ? replaceFirstATSymbol(name)
@@ -336,17 +355,27 @@ function visitIdent({ val, name, rest, mixin, property }) {
     return rest ? `${nameText}...` : nameText
   }
   if (identVal.__type === 'Expression') {
+    const comments = []
     if (findNodesType(identVal.nodes, 'Object')) OBJECT_KEY_LIST.push(name)
     const before = handleLinenoAndIndentation(identVal)
     oldLineno = identVal.lineno
     const nodes = nodesToJSON(identVal.nodes || [])
     let expText = ''
     nodes.forEach((node, idx) => {
-      expText += idx ? ` ${visitNode(node)}` : visitNode(node)
+      // handle inline comment
+      if (node.__type === 'Comment') {
+        comments.push(node)
+      } else {
+        expText += idx ? ` ${visitNode(node)}` : visitNode(node)
+      }
     })
+    
+    let commentText = comments.map(node => visitNode(node)).join(' ')
+    commentText = commentText.replace(/^ +/, ' ')
+
     VARIABLE_NAME_LIST.push(name)
     identLength--
-    return `${before}${replaceFirstATSymbol(name)}: ${trimFnSemicolon(expText)};`
+    return `${before}${replaceFirstATSymbol(name)}: ${trimFnSemicolon(expText)}; ${commentText}`
   }
   if (identVal.__type === 'Function') {
     identLength--
@@ -578,7 +607,7 @@ function visitEach(node) {
   let exprText = `@each $${node.val} in `
   VARIABLE_NAME_LIST.push(node.val)
   exprNodes.forEach((node, idx) => {
-    const prefix = node.__type === 'Ident' ? '$' : ''
+    const prefix = node.__type === 'Ident' ? COMPIL_CONFIT.scss.variable : ''
     const exp = prefix + visitNode(node)
     exprText += idx ? `, ${exp}` : exp
   })
@@ -587,7 +616,7 @@ function visitEach(node) {
   }
   const blank = getIndentation()
   before += blank
-  const block = visitBlock(node.block, blank).replace(`$${node.key}`, '')
+  const block = visitBlock(node.block, blank).replace(`${COMPIL_CONFIT.scss.variable}${node.key}`, '')
   return before + exprText + block
 }
 
@@ -648,9 +677,24 @@ function visitMedia(node) {
   oldLineno = node.lineno
   const val = _get(node, ['val'], {})
   const nodeVal = val.toJSON && val.toJSON() || {}
+  let valText = visitNode(nodeVal)
+  const block = visitBlock(node.block)
+
+  if(valText[0]==='$') {
+    valText = `#{${valText}}`
+  }
+
+  return `${before}@media ${valText + block}`
+}
+
+function visitAtblock(node) {
+  const before = handleLinenoAndIndentation(node)
+  oldLineno = node.lineno
+  const val = _get(node, ['val'], {})
+  const nodeVal = val.toJSON && val.toJSON() || {}
   const valText = visitNode(nodeVal)
   const block = visitBlock(node.block)
-  return `${before}@media ${valText + block}`
+  return `${before}@mixin ${valText + block}`
 }
 
 function visitFeature(node) {
@@ -746,7 +790,7 @@ function visitReturn(node) {
 
 // 处理 stylus 语法树；handle stylus Syntax Tree
 export default function visitor(ast, options, globalVariableList, globalMixinList) {
-  quote = options.quote
+  quote = options.quote || "'";
   autoprefixer = options.autoprefixer
   GLOBAL_MIXIN_NAME_LIST = globalMixinList
   GLOBAL_VARIABLE_NAME_LIST = globalVariableList
